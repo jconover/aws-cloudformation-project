@@ -1,0 +1,38 @@
+[
+  {
+    "ParameterKey": "EnvironmentName",
+    "ParameterValue": "devops-portfolio-prod"
+  },
+  {
+    "ParameterKey": "VpcCIDR",
+    "ParameterValue": "10.1.0.0/16"
+  },
+  {
+    "ParameterKey": "DBInstanceClass",
+    "ParameterValue": "db.t3.small"
+  },
+  {
+    "ParameterKey": "DBAllocatedStorage",
+    "ParameterValue": "50"
+  },
+  {
+    "ParameterKey": "MultiAZ",
+    "ParameterValue": "true"
+  },
+  {
+    "ParameterKey": "NodeInstanceType",
+    "ParameterValue": "t3.large"
+  },
+  {
+    "ParameterKey": "NodeGroupDesiredCapacity",
+    "ParameterValue": "3"
+  },
+  {
+    "ParameterKey": "NodeGroupMinSize",
+    "ParameterValue": "2"
+  },
+  {
+    "ParameterKey": "NodeGroupMaxSize",
+    "ParameterValue": "10"
+  }
+]
