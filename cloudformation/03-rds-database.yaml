@@ -108,9 +108,9 @@ Resources:
   DBParameterGroup:
     Type: AWS::RDS::DBParameterGroup
     Properties:
-      DBParameterGroupName: !Sub ${EnvironmentName}-postgres14-params
-      Description: Custom parameter group for PostgreSQL 14
-      Family: postgres14
+      DBParameterGroupName: !Sub ${EnvironmentName}-postgres16-params
+      Description: Custom parameter group for PostgreSQL 16
+      Family: postgres16
       Parameters:
         shared_preload_libraries: pg_stat_statements
         log_statement: all
@@ -119,7 +119,7 @@ Resources:
         log_disconnections: 1
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-postgres14-params
+          Value: !Sub ${EnvironmentName}-postgres16-params
 
   # DB Instance
   DBInstance:
@@ -130,7 +130,7 @@ Resources:
       DBInstanceIdentifier: !Ref DBInstanceIdentifier
       DBName: !Ref DBName
       Engine: postgres
-      EngineVersion: '14.9'
+      EngineVersion: '16.10'
       DBInstanceClass: !Ref DBInstanceClass
       AllocatedStorage: !Ref DBAllocatedStorage
       StorageType: gp3
