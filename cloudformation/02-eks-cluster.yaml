@@ -338,6 +338,8 @@ Resources:
   # CloudWatch Log Group for EKS
   EKSLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       LogGroupName: !Sub /aws/eks/${ClusterName}/cluster
       RetentionInDays: 7
