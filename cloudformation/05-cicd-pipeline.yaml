@@ -23,18 +23,9 @@ Parameters:
     Default: github/personal-access-token
 
 Resources:
-  # Secrets Manager Secret for GitHub Token
-  GitHubTokenSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Name: !Ref GitHubTokenSecretName
-      Description: GitHub personal access token for CodePipeline
-      SecretString: '{"token":"REPLACE_WITH_YOUR_GITHUB_TOKEN"}'
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName}-github-token
-        - Key: Environment
-          Value: !Ref EnvironmentName
+  # NOTE: GitHubTokenSecret must be created manually using:
+  # ./scripts/update-github-token.sh ghp_your_token_here
+  # The secret name should match the GitHubTokenSecretName parameter
 
   # CodeBuild Service Role
   CodeBuildServiceRole:
@@ -68,8 +59,8 @@ Resources:
                   - s3:PutObject
                 Resource:
                   - !Sub
-                    - ${BucketArn}/*
-                    - BucketArn:
+                    - arn:aws:s3:::${BucketName}/*
+                    - BucketName:
                         Fn::ImportValue: !Sub ${EnvironmentName}-ArtifactsBucket
                   - !Sub ${PipelineArtifactBucket.Arn}/*
               - Effect: Allow
