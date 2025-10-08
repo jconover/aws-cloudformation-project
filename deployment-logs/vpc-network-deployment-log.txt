@@ -1,0 +1,34 @@
+./scripts/deploy-stack.sh vpc-network 01-vpc-network.yaml devops-portfolio
+=== Deploying CloudFormation Stack ===
+Stack Name: devops-portfolio-vpc-network
+Template: 01-vpc-network.yaml
+Environment: devops-portfolio
+Region: us-east-1
+
+Validating template...
+Template validation successful
+No parameters file found, using defaults
+Creating new stack...
+{
+    "StackId": "arn:aws:cloudformation:us-east-1:457780993905:stack/devops-portfolio-vpc-network/418026c0-a44d-11f0-92ba-1243f98f04d7"
+}
+Waiting for stack creation to complete...
+Stack created successfully!
+
+=== Stack Outputs ===
+--------------------------------------------------------------------------------------------------
+|                                         DescribeStacks                                         |
++----------------+-------------------------------------------------------------------------------+
+|  PrivateSubnet1|  subnet-061550ddae380e8eb                                                     |
+|  PrivateSubnet2|  subnet-05ea7e5dba734b770                                                     |
+|  PrivateSubnets|  subnet-061550ddae380e8eb,subnet-05ea7e5dba734b770,subnet-092ef206690d6fd79   |
+|  PrivateSubnet3|  subnet-092ef206690d6fd79                                                     |
+|  VpcCIDR       |  10.0.0.0/16                                                                  |
+|  VPC           |  vpc-07c4fa792e4cb45ef                                                        |
+|  PublicSubnets |  subnet-05db5826ab2747e83,subnet-02295657022d40753,subnet-0ef2895f8bcf13c0a   |
+|  PublicSubnet3 |  subnet-0ef2895f8bcf13c0a                                                     |
+|  PublicSubnet2 |  subnet-02295657022d40753                                                     |
+|  PublicSubnet1 |  subnet-05db5826ab2747e83                                                     |
++----------------+-------------------------------------------------------------------------------+
+
+Deployment completed!

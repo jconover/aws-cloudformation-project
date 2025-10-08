@@ -1,0 +1,32 @@
+./scripts/deploy-stack.sh eks-cluster 02-eks-cluster.yaml devops-portfolio
+=== Deploying CloudFormation Stack ===
+Stack Name: devops-portfolio-eks-cluster
+Template: 02-eks-cluster.yaml
+Environment: devops-portfolio
+Region: us-east-1
+
+Validating template...
+Template validation successful
+No parameters file found, using defaults
+Creating new stack...
+{
+    "StackId": "arn:aws:cloudformation:us-east-1:457780993905:stack/devops-portfolio-eks-cluster/5ba312a0-a453-11f0-bf5f-0e4f62b55451"
+}
+Waiting for stack creation to complete...
+Stack created successfully!
+
+=== Stack Outputs ===
+-------------------------------------------------------------------------------------------------------------------------------------------------
+|                                                                DescribeStacks                                                                 |
++-----------------------------+-----------------------------------------------------------------------------------------------------------------+
+|  EKSClusterEndpoint         |  https://AA9FB0F47D47F33D2966B4B1C5B76320.gr7.us-east-1.eks.amazonaws.com                                       |
+|  EKSClusterArn              |  arn:aws:eks:us-east-1:457780993905:cluster/devops-portfolio-cluster                                            |
+|  ALBIngressControllerRoleArn|  arn:aws:iam::457780993905:role/devops-portfolio-alb-ingress-controller                                         |
+|  EKSClusterName             |  devops-portfolio-cluster                                                                                       |
+|  EKSClusterSecurityGroup    |  sg-0d639df86c78f143d                                                                                           |
+|  EKSOIDCProviderArn         |  arn:aws:iam::457780993905:oidc-provider/oidc.eks.us-east-1.amazonaws.com/id/AA9FB0F47D47F33D2966B4B1C5B76320   |
+|  ECRRepositoryUri           |  457780993905.dkr.ecr.us-east-1.amazonaws.com/devops-portfolio-app                                              |
+|  EKSNodeSecurityGroup       |  sg-06a57432bb8d0f311                                                                                           |
++-----------------------------+-----------------------------------------------------------------------------------------------------------------+
+
+Deployment completed!
