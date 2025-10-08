@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'CI/CD Pipeline with CodePipeline, CodeBuild, and CodeDeploy'
+Description: 'CI/CD Pipeline with CodePipeline and CodeBuild for EKS'
 
 Parameters:
   EnvironmentName:
@@ -124,18 +124,6 @@ Resources:
                   - !GetAtt BuildProject.Arn
               - Effect: Allow
                 Action:
-                  - codedeploy:CreateDeployment
-                  - codedeploy:GetApplication
-                  - codedeploy:GetApplicationRevision
-                  - codedeploy:GetDeployment
-                  - codedeploy:GetDeploymentConfig
-                  - codedeploy:RegisterApplicationRevision
-                Resource:
-                  - !Sub arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:application:${CodeDeployApplication}
-                  - !Sub arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentgroup:${CodeDeployApplication}/*
-                  - !Sub arn:aws:codedeploy:${AWS::Region}:${AWS::AccountId}:deploymentconfig:*
-              - Effect: Allow
-                Action:
                   - sns:Publish
                 Resource:
                   - Fn::ImportValue: !Sub ${EnvironmentName}-NotificationTopicArn
@@ -207,29 +195,6 @@ Resources:
       LogGroupName: !Sub /aws/codebuild/${EnvironmentName}-build
       RetentionInDays: 7
 
-  # CodeDeploy Application
-  CodeDeployApplication:
-    Type: AWS::CodeDeploy::Application
-    Properties:
-      ApplicationName: !Sub ${EnvironmentName}-app
-      ComputePlatform: ECS
-
-  # CodeDeploy Service Role
-  CodeDeployServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub ${EnvironmentName}-codedeploy-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: codedeploy.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS
-        - arn:aws:iam::aws:policy/AWSCodeDeployRoleForECSLimited
-
   # CodePipeline
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
@@ -272,21 +237,8 @@ Resources:
               OutputArtifacts:
                 - Name: BuildOutput
 
-        - Name: Deploy
-          Actions:
-            - Name: DeployAction
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CodeDeployToECS
-                Version: '1'
-              Configuration:
-                ApplicationName: !Ref CodeDeployApplication
-                DeploymentGroupName: !Ref CodeDeployDeploymentGroup
-                TaskDefinitionTemplateArtifact: BuildOutput
-                AppSpecTemplateArtifact: BuildOutput
-              InputArtifacts:
-                - Name: BuildOutput
+        # Deploy stage is handled by CodeBuild (see buildspec.yml)
+        # CodeBuild deploys directly to EKS using kubectl
 
         - Name: Notify
           Actions:
@@ -316,20 +268,6 @@ Resources:
       TargetAction: SourceAction
       TargetPipelineVersion: !GetAtt Pipeline.Version
       RegisterWithThirdParty: true
-
-  # CodeDeploy Deployment Group
-  CodeDeployDeploymentGroup:
-    Type: AWS::CodeDeploy::DeploymentGroup
-    Properties:
-      ApplicationName: !Ref CodeDeployApplication
-      DeploymentGroupName: !Sub ${EnvironmentName}-deployment-group
-      ServiceRoleArn: !GetAtt CodeDeployServiceRole.Arn
-      DeploymentConfigName: CodeDeployDefault.ECSAllAtOnce
-      AutoRollbackConfiguration:
-        Enabled: true
-        Events:
-          - DEPLOYMENT_FAILURE
-          - DEPLOYMENT_STOP_ON_ALARM
 
   # Lambda Function for Pipeline Notifications
   NotificationFunction:
@@ -455,12 +393,6 @@ Outputs:
     Value: !Ref BuildProject
     Export:
       Name: !Sub ${EnvironmentName}-BuildProjectName
-
-  CodeDeployApplicationName:
-    Description: CodeDeploy application name
-    Value: !Ref CodeDeployApplication
-    Export:
-      Name: !Sub ${EnvironmentName}-CodeDeployApplicationName
 
   PipelineArtifactBucket:
     Description: Pipeline artifact bucket name
