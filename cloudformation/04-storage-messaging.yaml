@@ -1,0 +1,464 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3, Lambda, SQS, and SNS for event-driven architecture'
+
+Parameters:
+  EnvironmentName:
+    Description: Environment name prefix
+    Type: String
+    Default: devops-portfolio
+
+Resources:
+  # S3 Bucket for Application Artifacts
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${EnvironmentName}-artifacts-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 30
+          - Id: MoveToIA
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: STANDARD_IA
+              - TransitionInDays: 90
+                StorageClass: GLACIER
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-artifacts
+
+  # S3 Bucket for Static Content/Assets
+  StaticContentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${EnvironmentName}-static-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+            AllowedHeaders:
+              - '*'
+            MaxAge: 3600
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-static
+
+  # S3 Bucket for Logs
+  LogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${EnvironmentName}-logs-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldLogs
+            Status: Enabled
+            ExpirationInDays: 90
+          - Id: MoveToGlacier
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: GLACIER
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-logs
+
+  # SNS Topic for Notifications
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${EnvironmentName}-notifications
+      DisplayName: DevOps Portfolio Notifications
+      Subscription:
+        - Endpoint: !GetAtt NotificationQueue.Arn
+          Protocol: sqs
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-notifications
+
+  # SNS Topic Policy
+  NotificationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref NotificationTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - s3.amazonaws.com
+                - lambda.amazonaws.com
+                - events.amazonaws.com
+            Action:
+              - SNS:Publish
+            Resource: !Ref NotificationTopic
+
+  # SQS Queue for Processing Tasks
+  ProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${EnvironmentName}-processing-queue
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600  # 14 days
+      ReceiveMessageWaitTimeSeconds: 20  # Long polling
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ProcessingDeadLetterQueue.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-processing-queue
+
+  # Dead Letter Queue for Processing
+  ProcessingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${EnvironmentName}-processing-dlq
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-processing-dlq
+
+  # SQS Queue for Notifications
+  NotificationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${EnvironmentName}-notification-queue
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 345600  # 4 days
+      ReceiveMessageWaitTimeSeconds: 20
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-notification-queue
+
+  # SQS Queue Policy to allow SNS to send messages
+  NotificationQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref NotificationQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action:
+              - sqs:SendMessage
+            Resource: !GetAtt NotificationQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref NotificationTopic
+
+  # Lambda Execution Role
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-lambda-execution-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: LambdaS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub ${ArtifactsBucket.Arn}/*
+                  - !Sub ${StaticContentBucket.Arn}/*
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt ArtifactsBucket.Arn
+                  - !GetAtt StaticContentBucket.Arn
+        - PolicyName: LambdaSQSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:SendMessage
+                Resource:
+                  - !GetAtt ProcessingQueue.Arn
+                  - !GetAtt NotificationQueue.Arn
+        - PolicyName: LambdaSNSAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource:
+                  - !Ref NotificationTopic
+        - PolicyName: LambdaSecretsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - Fn::ImportValue: !Sub ${EnvironmentName}-DBSecretArn
+
+  # Lambda Function for Processing
+  ProcessingFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${EnvironmentName}-processing-function
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          ARTIFACTS_BUCKET: !Ref ArtifactsBucket
+          STATIC_BUCKET: !Ref StaticContentBucket
+          NOTIFICATION_TOPIC: !Ref NotificationTopic
+          DB_SECRET_ARN:
+            Fn::ImportValue: !Sub ${EnvironmentName}-DBSecretArn
+          ENVIRONMENT: !Ref EnvironmentName
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime
+
+          s3 = boto3.client('s3')
+          sns = boto3.client('sns')
+          secrets = boto3.client('secretsmanager')
+
+          def lambda_handler(event, context):
+              print(f"Received event: {json.dumps(event)}")
+
+              try:
+                  # Process SQS messages
+                  for record in event.get('Records', []):
+                      if 'body' in record:
+                          message = json.loads(record['body'])
+                          process_message(message)
+
+                  return {
+                      'statusCode': 200,
+                      'body': json.dumps('Processing completed successfully')
+                  }
+              except Exception as e:
+                  print(f"Error processing message: {str(e)}")
+                  raise
+
+          def process_message(message):
+              # Example processing logic
+              timestamp = datetime.now().isoformat()
+              bucket = os.environ['STATIC_BUCKET']
+              key = f"processed/{timestamp}.json"
+
+              # Store processed result in S3
+              s3.put_object(
+                  Bucket=bucket,
+                  Key=key,
+                  Body=json.dumps(message),
+                  ContentType='application/json'
+              )
+
+              # Send notification
+              sns.publish(
+                  TopicArn=os.environ['NOTIFICATION_TOPIC'],
+                  Subject='Processing Complete',
+                  Message=f'Successfully processed message and stored in {key}'
+              )
+
+              print(f"Processed message and stored in s3://{bucket}/{key}")
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-processing-function
+
+  # Lambda Event Source Mapping for SQS
+  ProcessingFunctionEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt ProcessingQueue.Arn
+      FunctionName: !Ref ProcessingFunction
+      BatchSize: 10
+      Enabled: true
+
+  # Lambda Function for S3 Events
+  S3EventFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${EnvironmentName}-s3-event-function
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          PROCESSING_QUEUE: !Ref ProcessingQueue
+          NOTIFICATION_TOPIC: !Ref NotificationTopic
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import urllib.parse
+
+          sqs = boto3.client('sqs')
+          sns = boto3.client('sns')
+
+          def lambda_handler(event, context):
+              print(f"Received S3 event: {json.dumps(event)}")
+
+              for record in event.get('Records', []):
+                  bucket = record['s3']['bucket']['name']
+                  key = urllib.parse.unquote_plus(record['s3']['object']['key'])
+
+                  # Send message to processing queue
+                  message = {
+                      'bucket': bucket,
+                      'key': key,
+                      'eventTime': record['eventTime'],
+                      'eventName': record['eventName']
+                  }
+
+                  # Send to SQS for async processing
+                  sqs.send_message(
+                      QueueUrl=context.function_name,
+                      MessageBody=json.dumps(message)
+                  )
+
+                  print(f"Queued processing for s3://{bucket}/{key}")
+
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('S3 events processed')
+              }
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-s3-event-function
+
+  # Lambda Permission for S3
+  S3InvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref S3EventFunction
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !GetAtt ArtifactsBucket.Arn
+
+  # CloudWatch Log Groups for Lambda
+  ProcessingFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ProcessingFunction}
+      RetentionInDays: 7
+
+  S3EventFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${S3EventFunction}
+      RetentionInDays: 7
+
+Outputs:
+  ArtifactsBucketName:
+    Description: Artifacts S3 bucket name
+    Value: !Ref ArtifactsBucket
+    Export:
+      Name: !Sub ${EnvironmentName}-ArtifactsBucket
+
+  StaticContentBucketName:
+    Description: Static content S3 bucket name
+    Value: !Ref StaticContentBucket
+    Export:
+      Name: !Sub ${EnvironmentName}-StaticContentBucket
+
+  LogsBucketName:
+    Description: Logs S3 bucket name
+    Value: !Ref LogsBucket
+    Export:
+      Name: !Sub ${EnvironmentName}-LogsBucket
+
+  ProcessingQueueUrl:
+    Description: Processing SQS queue URL
+    Value: !Ref ProcessingQueue
+    Export:
+      Name: !Sub ${EnvironmentName}-ProcessingQueueUrl
+
+  ProcessingQueueArn:
+    Description: Processing SQS queue ARN
+    Value: !GetAtt ProcessingQueue.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-ProcessingQueueArn
+
+  NotificationTopicArn:
+    Description: Notification SNS topic ARN
+    Value: !Ref NotificationTopic
+    Export:
+      Name: !Sub ${EnvironmentName}-NotificationTopicArn
+
+  ProcessingFunctionArn:
+    Description: Processing Lambda function ARN
+    Value: !GetAtt ProcessingFunction.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-ProcessingFunctionArn
+
+  S3EventFunctionArn:
+    Description: S3 Event Lambda function ARN
+    Value: !GetAtt S3EventFunction.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-S3EventFunctionArn
+
+  LambdaExecutionRoleArn:
+    Description: Lambda execution role ARN
+    Value: !GetAtt LambdaExecutionRole.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-LambdaExecutionRoleArn

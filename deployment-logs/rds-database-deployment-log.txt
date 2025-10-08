@@ -1,0 +1,30 @@
+./scripts/deploy-stack.sh rds-database 03-rds-database.yaml devops-portfolio
+=== Deploying CloudFormation Stack ===
+Stack Name: devops-portfolio-rds-database
+Template: 03-rds-database.yaml
+Environment: devops-portfolio
+Region: us-east-1
+
+Validating template...
+Template validation successful
+No parameters file found, using defaults
+Creating new stack...
+{
+    "StackId": "arn:aws:cloudformation:us-east-1:457780993905:stack/devops-portfolio-rds-database/6ad0d8e0-a456-11f0-9cb2-1201c614b4c5"
+}
+Waiting for stack creation to complete...
+Stack created successfully!
+
+=== Stack Outputs ===
+--------------------------------------------------------------------------------------------------------------------------
+|                                                     DescribeStacks                                                     |
++----------------------+-------------------------------------------------------------------------------------------------+
+|  DBSecretArn         |  arn:aws:secretsmanager:us-east-1:457780993905:secret:devops-portfolio/rds/credentials-MwHX1K   |
+|  DBSecurityGroup     |  sg-0766614804cd53a85                                                                           |
+|  DBName              |  appdb                                                                                          |
+|  DBEndpoint          |  devops-portfolio-db.chuo6gkeifxo.us-east-1.rds.amazonaws.com                                   |
+|  DBInstanceIdentifier|  devops-portfolio-db                                                                            |
+|  DBPort              |  5432                                                                                           |
++----------------------+-------------------------------------------------------------------------------------------------+
+
+Deployment completed!
