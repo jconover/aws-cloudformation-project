@@ -1,0 +1,28 @@
+./scripts/deploy-stack.sh cicd-pipeline 05-cicd-pipeline.yaml devops-portfolio
+=== Deploying CloudFormation Stack ===
+Stack Name: devops-portfolio-cicd-pipeline
+Template: 05-cicd-pipeline.yaml
+Environment: devops-portfolio
+Region: us-east-1
+
+Validating template...
+Template validation successful
+No parameters file found, using defaults
+Creating new stack...
+{
+    "StackId": "arn:aws:cloudformation:us-east-1:457780993905:stack/devops-portfolio-cicd-pipeline/6150acc0-a463-11f0-b299-0affd774d009"
+}
+Waiting for stack creation to complete...
+Stack created successfully!
+
+=== Stack Outputs ===
+------------------------------------------------------------------------------------------------------------------------------
+|                                                       DescribeStacks                                                       |
++------------------------+---------------------------------------------------------------------------------------------------+
+|  BuildProjectName      |  devops-portfolio-build                                                                           |
+|  PipelineArtifactBucket|  devops-portfolio-pipeline-artifacts-457780993905                                                 |
+|  PipelineUrl           |  https://console.aws.amazon.com/codesuite/codepipeline/pipelines/devops-portfolio-pipeline/view   |
+|  PipelineName          |  devops-portfolio-pipeline                                                                        |
++------------------------+---------------------------------------------------------------------------------------------------+
+
+Deployment completed!

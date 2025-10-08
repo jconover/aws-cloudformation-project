@@ -1,0 +1,18 @@
+[
+  {
+    "ParameterKey": "EnvironmentName",
+    "ParameterValue": "devops-portfolio"
+  },
+  {
+    "ParameterKey": "GitHubRepo",
+    "ParameterValue": "jconover/aws-cloudformation-project"
+  },
+  {
+    "ParameterKey": "GitHubBranch",
+    "ParameterValue": "main"
+  },
+  {
+    "ParameterKey": "GitHubTokenSecretName",
+    "ParameterValue": "github/personal-access-token"
+  }
+]
