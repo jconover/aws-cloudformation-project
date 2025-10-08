@@ -49,6 +49,10 @@ kubeconfig
 # Secrets
 secrets/
 *.secret
+*token*
+*password*
+*credential*
+github-token.txt
 
 # Temporary files
 tmp/
