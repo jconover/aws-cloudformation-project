@@ -275,15 +275,27 @@ Resources:
     Properties:
       RoleName: !Sub ${EnvironmentName}-alb-ingress-controller
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Federated: !Ref EKSOIDCProvider
-            Action: sts:AssumeRoleWithWebIdentity
-            Condition:
-              StringEquals:
-                !Sub '${EKSCluster.OpenIdConnectIssuerUrl}:sub': system:serviceaccount:kube-system:aws-load-balancer-controller
+        Fn::Sub:
+          - |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Federated": "${OIDCProviderArn}"
+                  },
+                  "Action": "sts:AssumeRoleWithWebIdentity",
+                  "Condition": {
+                    "StringEquals": {
+                      "${OIDCUrl}:sub": "system:serviceaccount:kube-system:aws-load-balancer-controller"
+                    }
+                  }
+                }
+              ]
+            }
+          - OIDCProviderArn: !Ref EKSOIDCProvider
+            OIDCUrl: !GetAtt EKSCluster.OpenIdConnectIssuerUrl
       Policies:
         - PolicyName: ALBIngressControllerPolicy
           PolicyDocument:
