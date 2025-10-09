@@ -73,7 +73,6 @@ phases:
               kubernetes/deployment.yaml | kubectl apply -f -
         fi
       - kubectl apply -f kubernetes/service.yaml
-      - kubectl apply -f kubernetes/ingress.yaml
       - echo Waiting for deployment rollout...
       - kubectl rollout status deployment/devops-portfolio-app -n default --timeout=5m
       - echo Deployment completed successfully
