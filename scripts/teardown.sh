@@ -67,8 +67,31 @@ delete_stack() {
         for bucket in $BUCKETS; do
             if [ -n "$bucket" ]; then
                 echo "Emptying bucket: $bucket"
+
+                # Delete all object versions (for versioned buckets)
+                echo "  Deleting object versions..."
+                aws s3api delete-objects \
+                    --bucket "$bucket" \
+                    --delete "$(aws s3api list-object-versions \
+                        --bucket "$bucket" \
+                        --query='{Objects: Versions[].{Key:Key,VersionId:VersionId}}' \
+                        --max-items 1000 \
+                        --region ${AWS_REGION:-us-east-1} 2>/dev/null)" \
+                    --region ${AWS_REGION:-us-east-1} 2>/dev/null || true
+
+                # Delete all delete markers (for versioned buckets)
+                echo "  Deleting delete markers..."
+                aws s3api delete-objects \
+                    --bucket "$bucket" \
+                    --delete "$(aws s3api list-object-versions \
+                        --bucket "$bucket" \
+                        --query='{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
+                        --max-items 1000 \
+                        --region ${AWS_REGION:-us-east-1} 2>/dev/null)" \
+                    --region ${AWS_REGION:-us-east-1} 2>/dev/null || true
+
+                # Delete remaining objects (for non-versioned buckets)
                 aws s3 rm s3://$bucket --recursive --region ${AWS_REGION:-us-east-1} 2>/dev/null || true
-                aws s3api delete-bucket --bucket $bucket --region ${AWS_REGION:-us-east-1} 2>/dev/null || true
             fi
         done
     fi
@@ -109,11 +132,33 @@ delete_stack() {
     echo -e "${GREEN}Stack deleted: $stack_name${NC}"
 }
 
+# Function to cleanup orphaned CloudWatch Log Groups
+cleanup_log_groups() {
+    echo -e "\n${YELLOW}Cleaning up CloudWatch Log Groups...${NC}"
+
+    LOG_GROUPS=(
+        "/aws/vpc/$ENVIRONMENT"
+        "/aws/codebuild/$ENVIRONMENT-build"
+        "/aws/eks/$ENVIRONMENT-cluster/cluster"
+        "/aws/lambda/$ENVIRONMENT-event-processor"
+    )
+
+    for log_group in "${LOG_GROUPS[@]}"; do
+        if aws logs describe-log-groups --log-group-name-prefix "$log_group" --region ${AWS_REGION:-us-east-1} --query 'logGroups[0]' --output text 2>/dev/null | grep -q "$log_group"; then
+            echo "Deleting log group: $log_group"
+            aws logs delete-log-group --log-group-name "$log_group" --region ${AWS_REGION:-us-east-1} 2>/dev/null || true
+        fi
+    done
+}
+
 # Delete all stacks
 for stack in "${STACKS[@]}"; do
     delete_stack "$stack"
     sleep 5  # Small delay between deletions
 done
+
+# Cleanup orphaned resources
+cleanup_log_groups
 
 echo -e "\n${GREEN}=== Teardown Complete ===${NC}"
 echo -e "${YELLOW}Note: Some resources may take additional time to fully delete${NC}"
