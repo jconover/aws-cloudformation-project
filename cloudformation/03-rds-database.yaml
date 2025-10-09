@@ -100,6 +100,12 @@ Resources:
           SourceSecurityGroupId:
             Fn::ImportValue: !Sub ${EnvironmentName}-EKSNodeSecurityGroup
           Description: Allow PostgreSQL access from EKS nodes
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId:
+            Fn::ImportValue: !Sub ${EnvironmentName}-EKSClusterSecurityGroup
+          Description: Allow PostgreSQL access from EKS cluster (pods)
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-db-sg

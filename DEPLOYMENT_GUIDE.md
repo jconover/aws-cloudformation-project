@@ -173,13 +173,19 @@ DB_ENDPOINT=$(aws cloudformation describe-stacks \
 echo "Database Endpoint: $DB_ENDPOINT"
 
 # Step 3: Get database password from Secrets Manager
+DB_SECRET_ARN=$(aws cloudformation describe-stacks \
+  --stack-name devops-portfolio-rds-database \
+  --query 'Stacks[0].Outputs[?OutputKey==`DBSecretArn`].OutputValue' \
+  --output text --region us-east-1)
+
 DB_SECRET=$(aws secretsmanager get-secret-value \
-  --secret-id devops-portfolio-db-secret \
+  --secret-id "$DB_SECRET_ARN" \
   --region us-east-1 \
   --query SecretString --output text)
 
-DB_PASSWORD=$(echo $DB_SECRET | jq -r '.password')
+DB_PASSWORD=$(echo "$DB_SECRET" | jq -r '.password')
 echo "Password retrieved (keep this secure!)"
+echo "Password: $DB_PASSWORD"
 
 # Step 4: Launch a PostgreSQL client pod in your EKS cluster
 kubectl run psql-client --rm -it --image=postgres:16 --restart=Never -- bash
@@ -220,8 +226,13 @@ DB_ENDPOINT=$(aws cloudformation describe-stacks \
   --query 'Stacks[0].Outputs[?OutputKey==`DBEndpoint`].OutputValue' \
   --output text --region us-east-1)
 
+DB_SECRET_ARN=$(aws cloudformation describe-stacks \
+  --stack-name devops-portfolio-rds-database \
+  --query 'Stacks[0].Outputs[?OutputKey==`DBSecretArn`].OutputValue' \
+  --output text --region us-east-1)
+
 DB_PASSWORD=$(aws secretsmanager get-secret-value \
-  --secret-id devops-portfolio-db-secret \
+  --secret-id "$DB_SECRET_ARN" \
   --region us-east-1 \
   --query SecretString --output text | jq -r '.password')
 
