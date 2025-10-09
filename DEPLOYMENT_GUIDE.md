@@ -156,32 +156,100 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
 
 ### 5. Initialize Database
 
+**Important:** The RDS database is in a private subnet and can only be accessed from within the VPC. You cannot connect directly from your local machine (this is a security best practice).
+
+**Option A: Connect using a Kubernetes Pod (Recommended)**
+
 ```bash
-# Get database endpoint
+# Step 1: Configure kubectl for EKS
+aws eks update-kubeconfig --name devops-portfolio-cluster --region us-east-1
+
+# Step 2: Get database endpoint
 DB_ENDPOINT=$(aws cloudformation describe-stacks \
   --stack-name devops-portfolio-rds-database \
   --query 'Stacks[0].Outputs[?OutputKey==`DBEndpoint`].OutputValue' \
-  --output text)
+  --output text --region us-east-1)
 
-# Get credentials from Secrets Manager
-SECRET_ARN=$(aws cloudformation describe-stacks \
-  --stack-name devops-portfolio-rds-database \
-  --query 'Stacks[0].Outputs[?OutputKey==`DBSecretArn`].OutputValue' \
-  --output text)
+echo "Database Endpoint: $DB_ENDPOINT"
 
-SECRET=$(aws secretsmanager get-secret-value --secret-id $SECRET_ARN --query SecretString --output text)
+# Step 3: Get database password from Secrets Manager
+DB_SECRET=$(aws secretsmanager get-secret-value \
+  --secret-id devops-portfolio-db-secret \
+  --region us-east-1 \
+  --query SecretString --output text)
 
-# Connect and create table
-# Use psql or your preferred PostgreSQL client
-echo $SECRET | jq -r '.password' | psql -h $DB_ENDPOINT -U dbadmin -d appdb -c "
+DB_PASSWORD=$(echo $DB_SECRET | jq -r '.password')
+echo "Password retrieved (keep this secure!)"
+
+# Step 4: Launch a PostgreSQL client pod in your EKS cluster
+kubectl run psql-client --rm -it --image=postgres:16 --restart=Never -- bash
+
+# Step 5: Inside the pod, connect to the database
+# (Replace <password> with the password from step 3)
+export PGPASSWORD="<paste-password-here>"
+psql -h <paste-db-endpoint-here> -U dbadmin -d appdb
+
+# Step 6: Create your table (run this at the psql prompt)
 CREATE TABLE IF NOT EXISTS items (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   description TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+# Step 7: Verify table creation
+\dt
+
+# Step 8: Insert test data
+INSERT INTO items (name, description) VALUES ('Test Item', 'Created from Kubernetes pod');
+
+# Step 9: Query to verify
+SELECT * FROM items;
+
+# Step 10: Exit psql and the pod
+\q
+exit
+```
+
+**Option B: All-in-One Script (Automated)**
+
+```bash
+# Get credentials and endpoint
+DB_ENDPOINT=$(aws cloudformation describe-stacks \
+  --stack-name devops-portfolio-rds-database \
+  --query 'Stacks[0].Outputs[?OutputKey==`DBEndpoint`].OutputValue' \
+  --output text --region us-east-1)
+
+DB_PASSWORD=$(aws secretsmanager get-secret-value \
+  --secret-id devops-portfolio-db-secret \
+  --region us-east-1 \
+  --query SecretString --output text | jq -r '.password')
+
+# Run SQL commands in a temporary pod
+kubectl run psql-client --rm -i --image=postgres:16 --restart=Never -- \
+  bash -c "export PGPASSWORD='$DB_PASSWORD' && psql -h $DB_ENDPOINT -U dbadmin -d appdb << 'EOF'
+CREATE TABLE IF NOT EXISTS items (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO items (name, description) VALUES ('Test Item', 'Initial setup complete');
+
+SELECT * FROM items;
+EOF
 "
 ```
+
+**Why can't I connect from my local machine?**
+
+The database is correctly configured in private subnets with no public access. This is a security best practice that prevents unauthorized access. The database can only be accessed from:
+- EKS pods (your applications)
+- EC2 instances within the VPC
+- Through a bastion host or VPN connection
+
+This design follows AWS security recommendations and is how production databases should be configured.
 
 ### 6. Build and Push Docker Image
 
