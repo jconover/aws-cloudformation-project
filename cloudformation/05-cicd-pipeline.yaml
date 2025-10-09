@@ -84,6 +84,12 @@ Resources:
                   - secretsmanager:GetSecretValue
                 Resource:
                   - Fn::ImportValue: !Sub ${EnvironmentName}-DBSecretArn
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:GetTemplate
+                  - cloudformation:ListStackResources
+                Resource: '*'
 
   # CodePipeline Service Role
   CodePipelineServiceRole:

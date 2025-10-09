@@ -1,6 +1,14 @@
 version: 0.2
 
 phases:
+  install:
+    commands:
+      - echo Installing kubectl and envsubst...
+      - curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
+      - chmod +x kubectl
+      - mv kubectl /usr/local/bin/
+      - kubectl version --client
+      - yum install -y gettext
   pre_build:
     commands:
       - echo Logging in to Amazon ECR...
@@ -40,17 +48,20 @@ phases:
       - cat imagedefinitions.json
       - echo Updating kubeconfig for EKS...
       - aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_DEFAULT_REGION
+      - echo Verifying kubectl access...
+      - kubectl get nodes
       - echo Deploying to EKS...
-      - |
-        export ECR_REPOSITORY_URI=$REPOSITORY_URI
-        export IMAGE_TAG=$IMAGE_TAG
-        export DB_SECRET_ARN=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-rds-database --query 'Stacks[0].Outputs[?OutputKey==`DBSecretArn`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
-        export SQS_QUEUE_URL=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-storage-messaging --query 'Stacks[0].Outputs[?OutputKey==`ProcessingQueueUrl`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
-        export S3_BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-storage-messaging --query 'Stacks[0].Outputs[?OutputKey==`StaticContentBucketName`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
-        export IAM_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-storage-messaging --query 'Stacks[0].Outputs[?OutputKey==`LambdaExecutionRoleArn`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
-        envsubst < kubernetes/deployment.yaml | kubectl apply -f -
-        kubectl apply -f kubernetes/service.yaml
-        kubectl apply -f kubernetes/ingress.yaml
+      - echo "Getting CloudFormation stack outputs..."
+      - export ECR_REPOSITORY_URI=$REPOSITORY_URI
+      - export IMAGE_TAG=$IMAGE_TAG
+      - export DB_SECRET_ARN=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-rds-database --query 'Stacks[0].Outputs[?OutputKey==`DBSecretArn`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
+      - export SQS_QUEUE_URL=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-storage-messaging --query 'Stacks[0].Outputs[?OutputKey==`ProcessingQueueUrl`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
+      - export S3_BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-storage-messaging --query 'Stacks[0].Outputs[?OutputKey==`StaticContentBucketName`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
+      - export IAM_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-storage-messaging --query 'Stacks[0].Outputs[?OutputKey==`LambdaExecutionRoleArn`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
+      - echo "Applying Kubernetes manifests..."
+      - envsubst < kubernetes/deployment.yaml | kubectl apply -f -
+      - kubectl apply -f kubernetes/service.yaml
+      - kubectl apply -f kubernetes/ingress.yaml
       - echo Waiting for deployment rollout...
       - kubectl rollout status deployment/devops-portfolio-app -n default --timeout=5m
       - echo Deployment completed successfully
