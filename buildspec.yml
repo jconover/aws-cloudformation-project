@@ -3,12 +3,13 @@ version: 0.2
 phases:
   install:
     commands:
-      - echo Installing kubectl and envsubst...
+      - echo Installing kubectl...
       - curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
-      - kubectl version --client
-      - yum install -y gettext
+      - kubectl version --client || true
+      - echo Checking for envsubst...
+      - which envsubst || echo "envsubst not found, will use sed for substitution"
   pre_build:
     commands:
       - echo Logging in to Amazon ECR...
@@ -59,7 +60,18 @@ phases:
       - export S3_BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-storage-messaging --query 'Stacks[0].Outputs[?OutputKey==`StaticContentBucketName`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
       - export IAM_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-storage-messaging --query 'Stacks[0].Outputs[?OutputKey==`LambdaExecutionRoleArn`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
       - echo "Applying Kubernetes manifests..."
-      - envsubst < kubernetes/deployment.yaml | kubectl apply -f -
+      - |
+        if command -v envsubst &> /dev/null; then
+          envsubst < kubernetes/deployment.yaml | kubectl apply -f -
+        else
+          sed -e "s|\${ECR_REPOSITORY_URI}|$ECR_REPOSITORY_URI|g" \
+              -e "s|\${IMAGE_TAG}|$IMAGE_TAG|g" \
+              -e "s|\${DB_SECRET_ARN}|$DB_SECRET_ARN|g" \
+              -e "s|\${SQS_QUEUE_URL}|$SQS_QUEUE_URL|g" \
+              -e "s|\${S3_BUCKET_NAME}|$S3_BUCKET_NAME|g" \
+              -e "s|\${IAM_ROLE_ARN}|$IAM_ROLE_ARN|g" \
+              kubernetes/deployment.yaml | kubectl apply -f -
+        fi
       - kubectl apply -f kubernetes/service.yaml
       - kubectl apply -f kubernetes/ingress.yaml
       - echo Waiting for deployment rollout...
