@@ -1,0 +1,68 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws --version
+      - REPOSITORY_URI=$(echo $IMAGE_REPO_NAME | cut -d':' -f1)
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      - echo "Repository URI - $REPOSITORY_URI"
+      - echo "Image tag - $IMAGE_TAG"
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building the Docker image...
+      - cd app
+      - docker build -t $REPOSITORY_URI:latest .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+      - cd ..
+
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker images...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo Writing image definitions file...
+      - |
+        cat > imagedefinitions.json <<EOF
+        [
+          {
+            "name": "devops-portfolio-app",
+            "imageUri": "${REPOSITORY_URI}:${IMAGE_TAG}"
+          }
+        ]
+        EOF
+      - cat imagedefinitions.json
+      - echo Updating kubeconfig for EKS...
+      - aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_DEFAULT_REGION
+      - echo Deploying to EKS...
+      - |
+        export ECR_REPOSITORY_URI=$REPOSITORY_URI
+        export IMAGE_TAG=$IMAGE_TAG
+        export DB_SECRET_ARN=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-rds-database --query 'Stacks[0].Outputs[?OutputKey==`DBSecretArn`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
+        export SQS_QUEUE_URL=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-storage-messaging --query 'Stacks[0].Outputs[?OutputKey==`ProcessingQueueUrl`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
+        export S3_BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-storage-messaging --query 'Stacks[0].Outputs[?OutputKey==`StaticContentBucketName`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
+        export IAM_ROLE_ARN=$(aws cloudformation describe-stacks --stack-name ${ENVIRONMENT}-storage-messaging --query 'Stacks[0].Outputs[?OutputKey==`LambdaExecutionRoleArn`].OutputValue' --output text --region $AWS_DEFAULT_REGION)
+        envsubst < kubernetes/deployment.yaml | kubectl apply -f -
+        kubectl apply -f kubernetes/service.yaml
+        kubectl apply -f kubernetes/ingress.yaml
+      - echo Waiting for deployment rollout...
+      - kubectl rollout status deployment/devops-portfolio-app -n default --timeout=5m
+      - echo Deployment completed successfully
+
+artifacts:
+  files:
+    - imagedefinitions.json
+    - appspec.yaml
+    - taskdef.json
+  name: BuildArtifact
+
+cache:
+  paths:
+    - '/root/.npm/**/*'
+    - '/root/.docker/**/*'
