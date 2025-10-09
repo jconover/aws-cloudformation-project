@@ -58,3 +58,6 @@ github-token.txt
 tmp/
 temp/
 *.tmp
+
+# Interview preparation (personal notes)
+INTERVIEW_TALKING_POINTS.md

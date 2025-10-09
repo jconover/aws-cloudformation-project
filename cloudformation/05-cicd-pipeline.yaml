@@ -10,7 +10,7 @@ Parameters:
   GitHubRepo:
     Description: GitHub repository name
     Type: String
-    Default: your-username/aws-cloudformation-project
+    Default: jconover/aws-cloudformation-project
 
   GitHubBranch:
     Description: GitHub branch name
