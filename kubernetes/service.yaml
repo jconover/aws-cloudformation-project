@@ -5,35 +5,12 @@ metadata:
   namespace: default
   labels:
     app: devops-portfolio
-  annotations:
-    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
-    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
-spec:
-  type: LoadBalancer
-  selector:
-    app: devops-portfolio
-    tier: backend
-  ports:
-  - name: http
-    port: 80
-    targetPort: 3000
-    protocol: TCP
-  sessionAffinity: None
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: devops-portfolio-internal
-  namespace: default
-  labels:
-    app: devops-portfolio
 spec:
   type: ClusterIP
   selector:
     app: devops-portfolio
-    tier: backend
   ports:
   - name: http
-    port: 3000
+    port: 80
     targetPort: 3000
     protocol: TCP
